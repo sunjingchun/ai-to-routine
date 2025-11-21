@@ -1,60 +1,75 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from "next/server";
 
-// 处理 POST 请求
 export async function POST(req: NextRequest) {
-  // 解析前端传来的 JSON 数据
+  const key = process.env.WILDCARD_API_KEY;
+
+  if (!key) {
+    console.error("❌ WILDCARD_API_KEY 未设置");
+    return NextResponse.json(
+      { error: "服务器未配置 API KEY" },
+      { status: 500 }
+    );
+  }
+
   const body = await req.json();
 
-  const { age, gender, skinType, concerns, budget } = body;
+  // 构建你的 prompt
+  const prompt = `
+你是一名专业的皮肤顾问，请根据以下用户信息，用 The Ordinary 产品生成科学、温和、安全的护肤方案。
 
-  // 这里暂时不做复杂逻辑，先返回一份“示例方案”
-  // 未来我们会在这里接入大模型，根据这些参数生成真实搭配
-  const mockRoutine = {
-    summary: `演示方案：${age || '未知年龄'}岁的${gender || '用户'}，肤质：${
-      skinType || '未填写'
-    }，主要诉求：${concerns || '未填写'}，预算：${budget || '未填写'}`,
-    morning: [
-      {
-        step: 1,
-        product: 'Squalane Cleanser',
-        description: '温和洁面，不破坏皮肤屏障',
-      },
-      {
-        step: 2,
-        product: 'Hyaluronic Acid 2% + B5',
-        description: '补水保湿，为后续精华打底',
-      },
-      {
-        step: 3,
-        product: '天然保湿因子 + HA（Natural Moisturizing Factors + HA）',
-        description: '锁水保湿，适合作为日常面霜',
-      },
-    ],
-    evening: [
-      {
-        step: 1,
-        product: 'Squalane Cleanser',
-        description: '卸妆 + 洁面二合一',
-      },
-      {
-        step: 2,
-        product: 'Niacinamide 10% + Zinc 1%',
-        description: '控油、淡痘印，适合多数肤质',
-      },
-      {
-        step: 3,
-        product: 'Granactive Retinoid 2% Emulsion（视黄醇精华）',
-        description: '晚间抗老精华，逐步建立耐受，一周 2–3 次',
-      },
-      {
-        step: 4,
-        product: '天然保湿因子 + HA',
-        description: '修护保湿，减少刺激',
-      },
-    ],
-    disclaimer:
-      '本方案为演示用示例，不构成医疗建议。敏感肌和严重皮肤问题请优先咨询皮肤科医生，并做好皮肤测试。',
-  };
+用户信息：
+年龄：${body.age}
+性别：${body.gender}
+肤质：${body.skinType}
+主要诉求：${body.concerns}
+预算：${body.budget}
 
-  return NextResponse.json(mockRoutine);
+请输出结构化 JSON：
+{
+  "summary": "...",
+  "morning": [ { "step": 1, "product": "...", "description": "..." } ],
+  "evening": [ { "step": 1, "product": "...", "description": "..." } ],
+  "warnings": "...",
+  "disclaimer": "..."
+}
+`;
+
+  try {
+    const result = await fetch(
+      "https://api.gptsapi.net/v1/chat/completions",   // Wildcard 的 endpoint
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${key}`,
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",     // Wildcard 支持的模型
+          messages: [
+            { role: "user", content: prompt }
+          ],
+          response_format: { type: "json_object" },
+        }),
+      }
+    );
+
+    if (!result.ok) {
+      const error = await result.text();
+      console.error("❌ Wildcard API 错误：", error);
+      return NextResponse.json(
+        { error: "调用 AI 服务失败", detail: error },
+        { status: 500 }
+      );
+    }
+
+    const data = await result.json();
+    const content = data.choices[0].message.content;
+    return NextResponse.json(JSON.parse(content));
+  } catch (err: any) {
+    console.error("❌ 服务器异常：", err);
+    return NextResponse.json(
+      { error: "服务器内部错误" },
+      { status: 500 }
+    );
+  }
 }

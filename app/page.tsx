@@ -51,7 +51,10 @@ export default function Home() {
       });
 
       if (!res.ok) {
-        throw new Error("服务器返回错误");
+        const errorData = await res.json().catch(() => null);
+        const msg =
+          (errorData && (errorData.error || errorData.detail)) || "服务器返回错误";
+        throw new Error(msg);
       }
 
       const data = await res.json();
