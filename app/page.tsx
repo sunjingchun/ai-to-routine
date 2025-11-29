@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Accordion from "./components/Accordion";
 import RoutineCard from "./components/RoutineCard";
 
@@ -36,6 +36,9 @@ export default function Home() {
   // Toast 提示
   const [toast, setToast] = useState<string | null>(null);
 
+  // 历史记录（最近 3 次方案）
+  const [history, setHistory] = useState<RoutineData[]>([]);
+
   // 构建用于复制的文本
   const buildRoutineText = (r: RoutineData) => {
     const lines: string[] = [];
@@ -69,6 +72,35 @@ export default function Home() {
 
     return lines.join("\n");
   };
+
+  // 首次加载时，从 localStorage 读取历史记录
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("ai-to-routine-history");
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        setHistory(parsed);
+      }
+    } catch (e) {
+      console.error("读取历史记录失败：", e);
+    }
+  }, []);
+
+  // 每次生成新方案时，写入 history & localStorage（只保留最近 3 条）
+  useEffect(() => {
+    if (!routine) return;
+
+    setHistory((prev) => {
+      const next = [routine, ...prev].slice(0, 3);
+      try {
+        localStorage.setItem("ai-to-routine-history", JSON.stringify(next));
+      } catch (e) {
+        console.error("写入历史记录失败：", e);
+      }
+      return next;
+    });
+  }, [routine]);
 
   const handleGenerate = async () => {
     setLoading(true);
@@ -280,6 +312,41 @@ export default function Home() {
             )}
           </div>
         </div>
+
+        {/* 历史记录区域 */}
+        {history.length > 0 && (
+          <section className="mt-10">
+            <h2 className="text-lg font-semibold mb-3">历史记录（最近 3 次）</h2>
+            <p className="text-xs text-gray-500 mb-2">
+              每次生成的方案会自动保存在本地浏览器，仅当前设备可见。
+            </p>
+            <div className="space-y-3">
+              {history.map((item, idx) => (
+                <div
+                  key={idx}
+                  className="border rounded-lg p-3 bg-gray-50 hover:bg-gray-100 transition"
+                >
+                  <p className="text-xs text-gray-400 mb-1">
+                    方案 #{idx + 1}
+                  </p>
+                  <p className="text-sm text-gray-800 mb-2">
+                    {item.summary.length > 60
+                      ? item.summary.slice(0, 60) + "…"
+                      : item.summary}
+                  </p>
+                  <details className="text-xs text-gray-700">
+                    <summary className="cursor-pointer text-blue-600">
+                      展开查看完整方案
+                    </summary>
+                    <pre className="whitespace-pre-wrap mt-2">
+                      {buildRoutineText(item)}
+                    </pre>
+                  </details>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
       </div>
 
       {/* Toast 提示 */}
